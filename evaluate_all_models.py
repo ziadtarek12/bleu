@@ -6,6 +6,7 @@ import transformers
 import torch
 import matplotlib.pyplot as plt
 import sacrebleu
+import shutil
 from config import NLLB_MODELS, SPM_URL, SPM_PATH, IWSLT_TEST_SRC, IWSLT_TEST_REF, SOURCE_LANGUAGE, TARGET_LANGUAGE
 
 def download_sentencepiece_model():
@@ -16,17 +17,21 @@ def download_sentencepiece_model():
     else:
         print("SentencePiece model already exists.")
 
-def download_models():
-    for model in NLLB_MODELS:
-        if not os.path.isdir(model["local_dir"]):
-            print(f"Downloading {model['name']} from HuggingFace Hub...")
-            subprocess.run([
-                "python", "-c",
-                f"from huggingface_hub import snapshot_download; snapshot_download(repo_id='{model['repo_id']}', local_dir='{model['local_dir']}')"
-            ], check=True)
-            print(f"{model['name']} downloaded.")
-        else:
-            print(f"{model['name']} already exists.")
+def download_model(model_info):
+    """Download a single model"""
+    print(f"Downloading {model_info['name']} from HuggingFace Hub...")
+    subprocess.run([
+        "python", "-c",
+        f"from huggingface_hub import snapshot_download; snapshot_download(repo_id='{model_info['repo_id']}', local_dir='{model_info['local_dir']}')"
+    ], check=True)
+    print(f"{model_info['name']} downloaded.")
+
+def delete_model(model_info):
+    """Delete a model directory to free up space"""
+    if os.path.isdir(model_info["local_dir"]):
+        print(f"Deleting {model_info['name']} to free up space...")
+        shutil.rmtree(model_info["local_dir"])
+        print(f"{model_info['name']} deleted.")
 
 def translate_with_model(model_info, tokenizer, processed_sentences):
     print(f"\nTranslating with {model_info['name']}...")
@@ -86,16 +91,19 @@ def main():
     # Ensure IWSLT14 test set is present
     subprocess.run(["bash", "prepare_iwslt14.sh"], check=True)
     
-    # Download SentencePiece model and all NLLB models
+    # Download SentencePiece model
     download_sentencepiece_model()
-    download_models()
     
-    # Load tokenizer (using the first model directory)
-    print("Loading tokenizer...")
-    tokenizer = transformers.AutoTokenizer.from_pretrained(NLLB_MODELS[0]["local_dir"], sp_model_kwargs={"model_file": SPM_PATH})
-    
-    # Preprocess test set
+    # Preprocess test set (do this once, before model loop)
     print("Preprocessing IWSLT14 test set...")
+    
+    # We need to load tokenizer first, so download the first model temporarily for tokenizer
+    first_model = NLLB_MODELS[0]
+    if not os.path.isdir(first_model["local_dir"]):
+        download_model(first_model)
+    
+    tokenizer = transformers.AutoTokenizer.from_pretrained(first_model["local_dir"], sp_model_kwargs={"model_file": SPM_PATH})
+    
     preprocessed_src = "preprocessed_test.de"
     with open(IWSLT_TEST_SRC, 'r', encoding='utf-8') as fin, open(preprocessed_src, 'w', encoding='utf-8') as fout:
         for line in fin:
@@ -112,10 +120,15 @@ def main():
     with open(IWSLT_TEST_REF, "r", encoding="utf-8") as f:
         reference_sentences = [line.strip() for line in f]
     
-    # Evaluate each model
+    # Evaluate each model one by one
     results = []
-    for model_info in NLLB_MODELS:
+    for i, model_info in enumerate(NLLB_MODELS):
         try:
+            # Download model if not already downloaded (first model is already downloaded)
+            if i > 0 and not os.path.isdir(model_info["local_dir"]):
+                download_model(model_info)
+            
+            # Translate and evaluate
             translations = translate_with_model(model_info, tokenizer, processed_sentences)
             
             # Save translations
@@ -129,9 +142,14 @@ def main():
             results.append({"name": model_info["name"], "bleu": bleu.score})
             print(f"{model_info['name']} BLEU Score: {bleu.score:.2f}")
             
+            # Delete model to free up space (except for the last one, we'll delete it after plotting)
+            delete_model(model_info)
+            
         except Exception as e:
             print(f"Error with {model_info['name']}: {e}")
             results.append({"name": model_info["name"], "bleu": 0.0})
+            # Still try to delete the model in case of error
+            delete_model(model_info)
     
     # Plot comparison
     model_names = [r["name"] for r in results]
@@ -154,6 +172,10 @@ def main():
     print("\nFinal Results:")
     for result in results:
         print(f"{result['name']}: {result['bleu']:.2f}")
+    
+    # Clean up preprocessed file
+    if os.path.exists(preprocessed_src):
+        os.remove(preprocessed_src)
 
 if __name__ == "__main__":
     main()

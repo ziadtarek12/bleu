@@ -40,16 +40,45 @@ def load_bert_cmlm_model():
         
         try:
             # Load the PyTorch checkpoint
-            print("🔄 Loading PyTorch model...")
+            print("🔄 Loading PyTorch checkpoint...")
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            model = torch.load(pt_file, map_location=device)
+            checkpoint = torch.load(pt_file, map_location=device)
             
-            # Set model to evaluation mode
+            print(f"✅ Checkpoint loaded on {device}")
+            print(f"Checkpoint type: {type(checkpoint)}")
+            
+            # Analyze what's in the checkpoint
+            if isinstance(checkpoint, dict):
+                print(f"📋 Checkpoint keys: {list(checkpoint.keys())}")
+                
+                # Check if it's a state dict or complete model
+                if 'model' in checkpoint:
+                    print("📦 Found 'model' key - extracting model")
+                    model = checkpoint['model']
+                elif 'state_dict' in checkpoint:
+                    print("📦 Found 'state_dict' key - this is just weights")
+                    print("⚠️  This requires the model architecture to load properly")
+                    return None, None, None
+                elif any(key.startswith(('bert.', 'encoder.', 'decoder.')) for key in checkpoint.keys()):
+                    print("📦 This appears to be a state dict (just weights)")
+                    print("⚠️  Available weight keys:")
+                    for key in list(checkpoint.keys())[:10]:  # Show first 10 keys
+                        print(f"     {key}")
+                    if len(checkpoint.keys()) > 10:
+                        print(f"     ... and {len(checkpoint.keys()) - 10} more")
+                    print("⚠️  Need model architecture to load these weights")
+                    return None, None, None
+                else:
+                    print("🤷 Unknown checkpoint format")
+                    model = checkpoint
+            else:
+                print("📦 Checkpoint is a complete model object")
+                model = checkpoint
+            
+            # Set model to evaluation mode if possible
             if hasattr(model, 'eval'):
                 model.eval()
-            
-            print(f"✅ Model loaded on {device}")
-            print(f"Model type: {type(model)}")
+                print("✅ Model set to evaluation mode")
             
             # Load tokenizer
             tokenizer = AutoTokenizer.from_pretrained("bert-base-multilingual-cased")
@@ -57,10 +86,10 @@ def load_bert_cmlm_model():
             return model, tokenizer, device
             
         except Exception as e:
-            print(f"❌ Failed to load PyTorch model: {e}")
+            print(f"❌ Failed to load PyTorch checkpoint: {e}")
             return None, None, None
     else:
-        print(f"❌ PyTorch model not found at: {pt_file}")
+        print(f"❌ PyTorch checkpoint not found at: {pt_file}")
         return None, None, None
 
 def translate_with_pytorch_model(sentences, model, tokenizer, device):

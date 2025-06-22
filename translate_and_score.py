@@ -2,6 +2,8 @@ import subprocess
 import sys
 import importlib.util
 import os
+import urllib.request
+import sentencepiece as spm
 from config import MODEL_PATHS, SRC_FILE, REF_FILE, OUTPUT_FILES
 import matplotlib.pyplot as plt
 
@@ -17,15 +19,35 @@ ensure_package("OpenNMT-py")
 from sacrebleu import corpus_bleu
 
 
-def translate_with_model(model_path, src_file, output_file):
+def download_sentencepiece_model(spm_url, spm_path):
+    if not os.path.isfile(spm_path):
+        print(f"Downloading SentencePiece model from {spm_url}...")
+        urllib.request.urlretrieve(spm_url, spm_path)
+        print("SentencePiece model downloaded.")
+    else:
+        print("SentencePiece model already exists.")
+
+
+def preprocess_with_sentencepiece_file(input_path, output_path, spm_path, lang_tag=None):
+    sp = spm.SentencePieceProcessor()
+    sp.load(spm_path)
+    with open(input_path, 'r', encoding='utf-8') as fin, open(output_path, 'w', encoding='utf-8') as fout:
+        for line in fin:
+            pieces = sp.encode(line.strip(), out_type=str)
+            if lang_tag:
+                pieces = [lang_tag] + pieces
+            fout.write(' '.join(pieces) + '\n')
+
+
+def translate_with_model(model_path, src_file, output_file, gpu=0):
     cmd = [
         "onmt_translate",
         "-model", model_path,
         "-src", src_file,
         "-output", output_file,
         "-replace_unk",
-        
-        "-gpu", "0"           # Use GPU 0
+        "-verbose",
+        "-gpu", str(gpu)
     ]
     print(f"Translating with model: {model_path}")
     try:
@@ -47,163 +69,33 @@ def compute_bleu(hypothesis_file, reference_file):
     return bleu.score
 
 
-def check_files():
-    for path in MODEL_PATHS:
-        if not os.path.isfile(path):
-            print(f"Model file not found: {path}")
-            sys.exit(1)
-    if not os.path.isfile(SRC_FILE):
-        print(f"Source file not found: {SRC_FILE}")
-        sys.exit(1)
-    if not os.path.isfile(REF_FILE):
-        print(f"Reference file not found: {REF_FILE}")
-        sys.exit(1)
-
-
-def prepare_iwslt_data():
-    """Run the shell script to prepare IWSLT data if not already done."""
-    de_file = "data/de-en/test.de"
-    en_file = "data/de-en/test.en"
-    if not (os.path.isfile(de_file) and os.path.isfile(en_file)):
-        print("Preparing IWSLT data (this may take a while)...")
-        script_content = '''
-set -x
-set -e
-CURRENT_DIR=$(pwd)
-RAW="$CURRENT_DIR/data"
-TMP="$CURRENT_DIR/data/tmp"
-MOSES_SCRIPTS="$CURRENT_DIR/mosesdecoder/scripts"
-TOKENIZER="$MOSES_SCRIPTS/tokenizer/tokenizer.perl"
-LC="$MOSES_SCRIPTS/tokenizer/lowercase.perl"
-CLEAN="$MOSES_SCRIPTS/training/clean-corpus-n.perl"
-URL="http://dl.fbaipublicfiles.com/fairseq/data/iwslt14/de-en.tgz"
-GZ="de-en.tgz"
-src=de
-tgt=en
-lang=de-en
-prep=$RAW/de-en
-orig=$TMP
-if [ ! -d "$MOSES_SCRIPTS" ]; then
-    echo "Moses scripts not found. Cloning Moses repository..."
-    git clone https://github.com/moses-smt/mosesdecoder.git
-fi
-mkdir -p $orig $prep
-cd $orig
-if [ -f $GZ ]; then
-    echo "$GZ already exists, skipping download"
-else
-    echo "Downloading data from ${URL}..."
-    wget "$URL"
-    if [ -f $GZ ]; then
-        echo "Data successfully downloaded."
-    else
-        echo "Data not successfully downloaded."
-        exit
-    fi
-    tar zxvf $GZ
-fi
-cd -
-if [ -f $prep/train.en ] && [ -f $prep/train.de ] && \
-    [ -f $prep/valid.en ] && [ -f $prep/valid.de ] && \
-    [ -f $prep/test.en ] && [ -f $prep/test.de ]; then
-    echo "iwslt dataset is already preprocessed, skip"
-else
-    echo "pre-processing train data..."
-    for l in $src $tgt; do
-        f=train.tags.$lang.$l
-        tok=train.tags.$lang.tok.$l
-        cat $orig/$lang/$f | \
-        grep -v '<url>' | \
-        grep -v '<talkid>' | \
-        grep -v '<keywords>' | \
-        sed -e 's/<title>//g' | \
-        sed -e 's/<\/title>//g' | \
-        sed -e 's/<description>//g' | \
-        sed -e 's/<\/description>//g' | \
-        perl $TOKENIZER -threads 8 -l $l > $prep/$tok
-        echo ""
-    done
-    perl $CLEAN -ratio 1.5 $prep/train.tags.$lang.tok $src $tgt $prep/train.tags.$lang.clean 1 175
-    for l in $src $tgt; do
-        perl $LC < $prep/train.tags.$lang.clean.$l > $prep/train.tags.$lang.$l
-    done
-    echo "pre-processing valid/test data..."
-    for l in $src $tgt; do
-        for o in `ls $orig/$lang/IWSLT14.TED*.$l.xml`; do
-        fname=${o##*/}
-        f=$prep/${fname%.*}
-        echo $o $f
-        grep '<seg id' $o | \
-            sed -e 's/<seg id="[0-9]*">\s*//g' | \
-            sed -e 's/\s*<\/seg>\s*//g' | \
-            sed -e "s/\’/\'/g" | \
-        perl $TOKENIZER -threads 8 -l $l | \
-        perl $LC > $f
-        echo ""
-        done
-    done
-    echo "creating train, valid, test..."
-    for l in $src $tgt; do
-        awk '{if (NR%23 == 0)  print $0; }' $prep/train.tags.de-en.$l > $prep/valid.$l
-        awk '{if (NR%23 != 0)  print $0; }' $prep/train.tags.de-en.$l > $prep/train.$l
-        cat $prep/IWSLT14.TED.dev2010.de-en.$l \
-            $prep/IWSLT14.TEDX.dev2012.de-en.$l \
-            $prep/IWSLT14.TED.tst2010.de-en.$l \
-            $prep/IWSLT14.TED.tst2011.de-en.$l \
-            $prep/IWSLT14.TED.tst2012.de-en.$l \
-            > $prep/test.$l
-    done
-fi
-'''
-        with open("prepare_iwslt14.sh", "w") as f:
-            f.write(script_content)
-        subprocess.run(["bash", "prepare_iwslt14.sh"], check=True)
-        os.remove("prepare_iwslt14.sh")
-        print("IWSLT data preparation complete.")
-    else:
-        print("IWSLT data already prepared.")
-
-
-def download_models(model_urls, model_paths):
-    """Download models from URLs if not already present."""
-    os.makedirs("models", exist_ok=True)  # Ensure models directory exists
-    for url, path in zip(model_urls, model_paths):
-        if not os.path.isfile(path):
-            print(f"Downloading model from {url} to {path}...")
-            try:
-                subprocess.run(["wget", "-O", path, url], check=True)
-            except subprocess.CalledProcessError as e:
-                print(f"Failed to download {url}: {e}")
-                sys.exit(1)
-        else:
-            print(f"Model already exists: {path}")
-
-
 def main():
-    from config import MODEL_URLS
-    download_models(MODEL_URLS, MODEL_PATHS)
-    prepare_iwslt_data()
-    check_files()
-    # Translate with each model
-    for i, model_path in enumerate(MODEL_PATHS):
-        translate_with_model(model_path, SRC_FILE, OUTPUT_FILES[i])
-    # Compute BLEU scores
-    bleu_scores = []
-    for output_file in OUTPUT_FILES:
-        score = compute_bleu(output_file, REF_FILE)
-        bleu_scores.append(score)
-    # Print BLEU scores
-    print("\nBLEU score comparison:")
-    for i, score in enumerate(bleu_scores):
-        print(f"Model {i+1} BLEU score: {score:.2f}")
-    # Plot BLEU scores
-    plt.figure(figsize=(8, 5))
-    plt.bar([f"Model {i+1}" for i in range(len(bleu_scores))], bleu_scores, color='skyblue')
+    # Download SentencePiece model
+    SPM_URL = "https://s3.amazonaws.com/opennmt-models/nllb-200/flores200_sacrebleu_tokenizer_spm.model"
+    SPM_PATH = "flores200_sacrebleu_tokenizer_spm.model"
+    download_sentencepiece_model(SPM_URL, SPM_PATH)
+
+    # Preprocess the source file with SentencePiece and language tag
+    preprocessed_src = "preprocessed_test.de"
+    lang_tag = "eng_Latn"  # Set the target language tag for NLLB models
+    preprocess_with_sentencepiece_file(SRC_FILE, preprocessed_src, SPM_PATH, lang_tag=lang_tag)
+
+    # Translate with the model
+    model_path = MODEL_PATHS[0]
+    output_file = OUTPUT_FILES[0]
+    translate_with_model(model_path, preprocessed_src, output_file, gpu=0)
+
+    # Compute BLEU score
+    score = compute_bleu(output_file, REF_FILE)
+    print(f"\nModel BLEU score: {score:.2f}")
+
+    # Plot BLEU score
+    plt.figure(figsize=(5, 4))
+    plt.bar(["Model"], [score], color='skyblue')
     plt.ylabel('BLEU Score')
-    plt.title('BLEU Score Comparison of Translation Models')
-    plt.ylim(0, max(bleu_scores) * 1.1 if bleu_scores else 1)
-    for i, v in enumerate(bleu_scores):
-        plt.text(i, v + 0.5, f"{v:.2f}", ha='center', va='bottom')
+    plt.title('BLEU Score of Translation Model')
+    plt.ylim(0, max(score * 1.1, 1))
+    plt.text(0, score + 0.5, f"{score:.2f}", ha='center', va='bottom')
     plt.tight_layout()
     plt.show()
 

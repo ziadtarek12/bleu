@@ -9,32 +9,8 @@ import transformers
 import torch
 import matplotlib.pyplot as plt
 
-# --- Download and Prepare IWSLT14 Test Set ---
-IWSLT_URL = "http://dl.fbaipublicfiles.com/fairseq/data/iwslt14/de-en.tgz"
-IWSLT_TGZ = "iwslt14_de-en.tgz"
-IWSLT_DIR = "data/de-en"
-IWSLT_TEST_SRC = os.path.join(IWSLT_DIR, "test.de")
-IWSLT_TEST_REF = os.path.join(IWSLT_DIR, "test.en")
 
-if not (os.path.isfile(IWSLT_TEST_SRC) and os.path.isfile(IWSLT_TEST_REF)):
-    print("Downloading and extracting IWSLT14 de-en test set...")
-    os.makedirs(IWSLT_DIR, exist_ok=True)
-    urllib.request.urlretrieve(IWSLT_URL, IWSLT_TGZ)
-    with tarfile.open(IWSLT_TGZ, "r:gz") as tar:
-        tar.extractall(path="data")
-    os.remove(IWSLT_TGZ)
-    # Move test files to IWSLT_DIR
-    for l in ["de", "en"]:
-        src = f"data/de-en/test.{l}"
-        if not os.path.isfile(src):
-            # Try to find the test file in the extracted folders
-            for root, dirs, files in os.walk("data/de-en"):
-                for file in files:
-                    if file == f"test.{l}":
-                        shutil.move(os.path.join(root, file), src)
-    print("IWSLT14 test set ready.")
-else:
-    print("IWSLT14 test set already present.")
+
 
 # --- Download SentencePiece Model if Needed ---
 SPM_URL = "https://s3.amazonaws.com/opennmt-models/nllb-200/flores200_sacrebleu_tokenizer_spm.model"
@@ -47,18 +23,15 @@ else:
     print("SentencePiece model already exists.")
 
 # --- Download CTranslate2 Model if Needed ---
-CT2_MODEL_URL = "https://your-model-download-link/nllb-200-distilled-1.3B-ct2-int8.zip"  # <-- Replace with actual link
-CT2_MODEL_DIR = "nllb_ct2_models/nllb-200-distilled-1.3B-ct2-int8"
-CT2_MODEL_ZIP = "nllb-200-distilled-1.3B-ct2-int8.zip"
+CT2_MODEL_URL = "https://s3.amazonaws.com/opennmt-models/nllb-200/nllb-200-1.3Bdst-onmt.pt"
+CT2_MODEL_DIR = "nllb_ct2_models/nllb-200-1.3Bdst-onmt.pt"
+CT2_MODEL_ZIP = "nllb-200-1.3Bdst-onmt.pt"
 
-if not os.path.isdir(CT2_MODEL_DIR):
+if not os.path.isfile(CT2_MODEL_DIR):
     print(f"Downloading CTranslate2 model from {CT2_MODEL_URL}...")
     os.makedirs("nllb_ct2_models", exist_ok=True)
-    urllib.request.urlretrieve(CT2_MODEL_URL, CT2_MODEL_ZIP)
-    print("Extracting model...")
-    shutil.unpack_archive(CT2_MODEL_ZIP, "nllb_ct2_models")
-    os.remove(CT2_MODEL_ZIP)
-    print("Model downloaded and extracted.")
+    urllib.request.urlretrieve(CT2_MODEL_URL, CT2_MODEL_DIR)
+    print("Model downloaded.")
 else:
     print("CTranslate2 model already exists.")
 

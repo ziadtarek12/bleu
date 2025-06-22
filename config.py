@@ -5,7 +5,7 @@ import os
 
 # List of model download URLs (fill these with your actual links)
 MODEL_URLS = [
-    "https://s3.amazonaws.com/opennmt-models/iwslt-brnn2.s131_acc_62.71_ppl_7.74_e20.pt"
+    "https://s3.amazonaws.com/opennmt-models/nllb-200/nllb-200-1.3Bdst-onmt.pt"
 ]
 
 # Dynamically assign model paths based on URLs

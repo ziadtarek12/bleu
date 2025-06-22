@@ -25,7 +25,9 @@ def translate_with_model(model_path, src_file, output_file):
         "-output", output_file,
         "-replace_unk",
         "-verbose",
-        "-gpu", "0"  # Use GPU 0
+        "-gpu", "0",           # Use GPU 0
+        "-batch_size", "8",    # Reduce batch size
+        "-beam_size", "2"      # Reduce beam size
     ]
     print(f"Translating with model: {model_path}")
     try:

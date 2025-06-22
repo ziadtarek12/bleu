@@ -74,6 +74,10 @@ except RuntimeError as e:
 print("Loading Hugging Face AutoTokenizer...")
 tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL_DIR, sp_model_kwargs={"model_file": SPM_PATH})
 
+# --- IWSLT14 Test Set Paths ---
+IWSLT_TEST_SRC = "data/de-en/test.de"
+IWSLT_TEST_REF = "data/de-en/test.en"
+
 # --- Preprocess IWSLT14 Test Set ---
 print("Preprocessing IWSLT14 test set with SentencePiece and language tag...")
 preprocessed_src = "preprocessed_test.de"

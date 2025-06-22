@@ -55,7 +55,7 @@ def translate_with_model(model_info, tokenizer, processed_sentences):
         translator = ctranslate2.Translator(model_info["local_dir"], device=DEVICE, compute_type="int8")
     
     # Process in batches
-    batch_size = 16  # Conservative batch size for multiple models
+    batch_size = 2  # Conservative batch size for multiple models
     translated_sentences = []
     SP_SPACE_CHAR = '\u2581'
     

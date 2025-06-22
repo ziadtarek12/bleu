@@ -1,2 +1,4 @@
 # requirements.txt
 sacrebleu
+ctranslate2 
+transformers 

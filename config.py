@@ -1,22 +1,35 @@
 # config.py
-# Edit these variables to match your file locations
+# Configuration for multiple NLLB models evaluation
 
 import os
 
-# List of model download URLs (fill these with your actual links)
-MODEL_URLS = [
-    "https://s3.amazonaws.com/opennmt-models/nllb-200/nllb-200-1.3Bdst-onmt.pt"
+# List of NLLB CTranslate2 models to evaluate (pre-converted CTranslate2 models)
+NLLB_MODELS = [
+    {
+        "name": "NLLB-200-3.3B",
+        "repo_id": "entai2965/nllb-200-3.3B-ctranslate2",
+        "local_dir": "nllb-200-3.3B-ctranslate2"
+    },
+    {
+        "name": "NLLB-200-1.3B-distilled",
+        "repo_id": "entai2965/nllb-200-distilled-1.3B-ctranslate2",
+        "local_dir": "nllb-200-distilled-1.3B-ctranslate2"
+    },
+    {
+        "name": "NLLB-200-600M-distilled",
+        "repo_id": "entai2965/nllb-200-distilled-600M-ctranslate2",
+        "local_dir": "nllb-200-distilled-600M-ctranslate2"
+    }
 ]
 
-# Dynamically assign model paths based on URLs
-MODEL_PATHS = [os.path.join("models", os.path.basename(url)) for url in MODEL_URLS]
+# SentencePiece model
+SPM_URL = "https://s3.amazonaws.com/opennmt-models/nllb-200/flores200_sacrebleu_tokenizer_spm.model"
+SPM_PATH = "flores200_sacrebleu_tokenizer_spm.model"
 
-# Path to OpenNMT-py translate.py script
-TRANSLATE_PY = "/path/to/OpenNMT-py/translate.py"
+# IWSLT14 Test Set Paths
+IWSLT_TEST_SRC = "data/de-en/test.de"
+IWSLT_TEST_REF = "data/de-en/test.en"
 
-# Paths to IWSLT15 test set source and reference files
-SRC_FILE = "data/de-en/test.de"  # German source
-REF_FILE = "data/de-en/test.en"  # English reference
-
-# Output files for each model (auto-generated)
-OUTPUT_FILES = [f"output_model{i}.txt" for i in range(len(MODEL_URLS))]
+# Translation settings
+SOURCE_LANGUAGE = "deu_Latn"
+TARGET_LANGUAGE = "eng_Latn"

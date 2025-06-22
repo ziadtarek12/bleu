@@ -1,32 +1,68 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -x
 set -e
 
-DATA_DIR="data/de-en"
-TEST_DE="$DATA_DIR/test.de"
-TEST_EN="$DATA_DIR/test.en"
+# Use current directory structure
+CURRENT_DIR=$(pwd)
+RAW="$CURRENT_DIR/data"
+TMP="$CURRENT_DIR/data/tmp"
+
 URL="http://dl.fbaipublicfiles.com/fairseq/data/iwslt14/de-en.tgz"
-TGZ="de-en.tgz"
+GZ="de-en.tgz"
 
-if [ -f "$TEST_DE" ] && [ -f "$TEST_EN" ]; then
-    echo "IWSLT14 test set already present."
-    exit 0
-fi
+src=de
+tgt=en
+lang=de-en
 
-echo "Downloading and extracting IWSLT14 de-en test set..."
-mkdir -p "$DATA_DIR"
-wget -O "$TGZ" "$URL"
-tar -xzf "$TGZ" -C data
-rm "$TGZ"
+prep=$RAW/de-en
+orig=$TMP
 
-# Move test files to the right place if needed
-for l in de en; do
-    if [ ! -f "$DATA_DIR/test.$l" ]; then
-        found=$(find data/de-en -name "test.$l" | head -n 1)
-        if [ -n "$found" ]; then
-            mv "$found" "$DATA_DIR/test.$l"
-        fi
+mkdir -p $orig $prep
+cd $orig
+
+if [ -f $GZ ]; then
+    echo "$GZ already exists, skipping download"
+else
+    echo "Downloading data from ${URL}..."
+    wget "$URL"
+    if [ -f $GZ ]; then
+        echo "Data successfully downloaded."
+    else
+        echo "Data not successfully downloaded."
+        exit
     fi
+    tar zxvf $GZ
+fi
+cd -
 
-done
+if [ -f $prep/test.en ] && [ -f $prep/test.de ]; then
+    echo "IWSLT14 test dataset is already prepared, skip"
+else
+    echo "Extracting raw text from XML files..."
+    for l in $src $tgt; do
+        for o in `ls $orig/$lang/IWSLT14.TED*.$l.xml`; do
+        fname=${o##*/}
+        f=$prep/${fname%.*}
+        echo "Processing $o -> $f"
+        grep '<seg id' $o | \
+            sed -e 's/<seg id="[0-9]*">\s*//g' | \
+            sed -e 's/\s*<\/seg>\s*//g' | \
+            sed -e "s/\'/\'/g" > $f
+        echo ""
+        done
+    done
 
-echo "IWSLT14 test set ready."
+    echo "Creating test files from raw XML extracts..."
+    for l in $src $tgt; do
+        # Create test files by concatenating the official test sets
+        cat $prep/IWSLT14.TED.dev2010.de-en.$l \
+            $prep/IWSLT14.TEDX.dev2012.de-en.$l \
+            $prep/IWSLT14.TED.tst2010.de-en.$l \
+            $prep/IWSLT14.TED.tst2011.de-en.$l \
+            $prep/IWSLT14.TED.tst2012.de-en.$l \
+            > $prep/test.$l
+    done
+    
+    echo "IWSLT14 test set ready."
+fi

@@ -23,14 +23,14 @@ else:
     print("SentencePiece model already exists.")
 
 # --- Download CTranslate2 Model if Needed ---
-CT2_MODEL_URL = "https://s3.amazonaws.com/opennmt-models/nllb-200/nllb-200-1.3Bdst-onmt.pt"
-CT2_MODEL_DIR = "nllb_ct2_models/nllb-200-1.3Bdst-onmt.pt"
-CT2_MODEL_ZIP = "nllb-200-1.3Bdst-onmt.pt"
+CT2_MODEL_URL = "https://huggingface.co/facebook/nllb-200-distilled-1.3B-ct2-int8/resolve/main/model.bin"
+CT2_MODEL_DIR = "nllb_ct2_models/nllb-200-distilled-1.3B-ct2-int8"
+CT2_MODEL_BIN = os.path.join(CT2_MODEL_DIR, "model.bin")
 
-if not os.path.isfile(CT2_MODEL_DIR):
+if not os.path.isfile(CT2_MODEL_BIN):
     print(f"Downloading CTranslate2 model from {CT2_MODEL_URL}...")
-    os.makedirs("nllb_ct2_models", exist_ok=True)
-    urllib.request.urlretrieve(CT2_MODEL_URL, CT2_MODEL_DIR)
+    os.makedirs(CT2_MODEL_DIR, exist_ok=True)
+    urllib.request.urlretrieve(CT2_MODEL_URL, CT2_MODEL_BIN)
     print("Model downloaded.")
 else:
     print("CTranslate2 model already exists.")

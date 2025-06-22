@@ -15,8 +15,8 @@ MODEL_PATHS = [os.path.join("models", os.path.basename(url)) for url in MODEL_UR
 TRANSLATE_PY = "/path/to/OpenNMT-py/translate.py"
 
 # Paths to IWSLT15 test set source and reference files
-SRC_FILE = "/path/to/IWSLT15.test.de"  # German source
-REF_FILE = "/path/to/IWSLT15.test.en"  # English reference
+SRC_FILE = "data/de-en/test.de"  # German source
+REF_FILE = "data/de-en/test.en"  # English reference
 
 # Output files for each model (auto-generated)
 OUTPUT_FILES = [f"output_model{i+1}.txt" for i in range(4)]

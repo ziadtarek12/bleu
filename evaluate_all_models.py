@@ -61,7 +61,7 @@ def convert_to_ct2(model_info):
         raise
 
 def apply_bpe_to_text(text_lines, bpe_model_path):
-    """Apply BPE to a list of text lines"""
+    """Apply BPE to a list of text lines with proper OpenNMT formatting"""
     # Create temporary input file
     temp_input = "temp_input.txt"
     temp_output = "temp_output.txt"
@@ -70,13 +70,23 @@ def apply_bpe_to_text(text_lines, bpe_model_path):
         for line in text_lines:
             f.write(line + '\n')
     
-    # Apply BPE
-    subprocess.run([
-        "subword-nmt", "apply-bpe",
-        "-c", bpe_model_path,
-        "--input", temp_input,
-        "--output", temp_output
-    ], check=True)
+    # Apply BPE with OpenNMT-compatible settings
+    try:
+        subprocess.run([
+            "subword-nmt", "apply-bpe",
+            "-c", bpe_model_path,
+            "--input", temp_input,
+            "--output", temp_output,
+            "--separator", "￭"  # Use OpenNMT-style separator
+        ], check=True)
+    except subprocess.CalledProcessError:
+        # Fallback to standard BPE if separator option not supported
+        subprocess.run([
+            "subword-nmt", "apply-bpe",
+            "-c", bpe_model_path,
+            "--input", temp_input,
+            "--output", temp_output
+        ], check=True)
     
     # Read BPE-encoded text
     with open(temp_output, 'r', encoding='utf-8') as f:
@@ -87,6 +97,31 @@ def apply_bpe_to_text(text_lines, bpe_model_path):
     os.remove(temp_output)
     
     return bpe_lines
+
+def detokenize_bpe(text):
+    """Comprehensive BPE detokenization for OpenNMT models"""
+    import re
+    
+    # Remove different types of BPE markers
+    text = text.replace('@@ ', '').replace('@@', '')  # Standard BPE
+    text = text.replace('￭ ', '').replace('￭', '')      # OpenNMT style
+    text = text.replace('▁', ' ')                      # SentencePiece style
+    
+    # Remove special tokens
+    text = re.sub(r'｟[^｠]*｠', '', text)  # Remove markup tokens
+    text = re.sub(r'<unk>', '', text)     # Remove <unk> tokens
+    text = re.sub(r'<s>', '', text)       # Remove start tokens
+    text = re.sub(r'</s>', '', text)      # Remove end tokens
+    
+    # Fix tokenization artifacts
+    text = re.sub(r'\s+', ' ', text)      # Multiple spaces to single space
+    text = re.sub(r'\s+([,.!?;:])', r'\1', text)  # Space before punctuation
+    text = re.sub(r'([,.!?;:])([a-zA-ZäöüßÄÖÜ])', r'\1 \2', text)  # Space after punctuation
+    text = re.sub(r"'\s+", "'", text)     # Fix apostrophes
+    text = re.sub(r'\s+"', '"', text)     # Fix quotes
+    text = re.sub(r'"\s+', '"', text)     # Fix quotes
+    
+    return text.strip()
 
 def translate_with_ct2(model_info, src_file):
     """Translate using CTranslate2"""
@@ -125,15 +160,10 @@ def translate_with_ct2(model_info, src_file):
         # Extract translations and clean up BPE
         for result in results:
             translation_tokens = result.hypotheses[0]
-            # Join tokens and clean up BPE markers
+            # Join tokens
             translation = ' '.join(translation_tokens)
-            # Remove BPE markers (@@)
-            translation = translation.replace('@@ ', '').replace('@@', '')
-            # Remove special markup tokens
-            import re
-            translation = re.sub(r'｟[^｠]*｠', '', translation)  # Remove markup tokens
-            translation = re.sub(r'<unk>', '', translation)     # Remove <unk> tokens
-            translation = re.sub(r'\s+', ' ', translation).strip()  # Clean up whitespace
+            # Apply comprehensive detokenization
+            translation = detokenize_bpe(translation)
             all_translations.append(translation)
     
     # Save translations
@@ -174,7 +204,7 @@ def main():
             results.append({"name": model_info["name"], "bleu": bleu.score})
             print(f"{model_info['name']} BLEU Score: {bleu.score:.2f}")
             
-            # Show sample translations
+            # Show sample translations with debugging
             print(f"\nSample translations from {model_info['name']}:")
             for i in range(min(3, len(translations))):
                 with open(IWSLT_TEST_SRC, 'r', encoding='utf-8') as f:
@@ -182,6 +212,18 @@ def main():
                 print(f"SRC: {src_lines[i].strip()}")
                 print(f"REF: {reference_sentences[i]}")
                 print(f"HYP: {translations[i]}")
+                
+                # Debug: Show raw translation before cleaning
+                if i == 0:  # Only for first sentence to avoid spam
+                    # Re-translate just this one sentence to show raw output
+                    bpe_sentences = apply_bpe_to_text([src_lines[i].strip()], model_info['bpe_path'])
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    translator = ctranslate2.Translator(model_info['ct2_model_path'], device=device)
+                    raw_result = translator.translate_batch([bpe_sentences[0]], beam_size=4)[0]
+                    raw_translation = ' '.join(raw_result.hypotheses[0])
+                    print(f"RAW: {raw_translation}")
+                    print(f"BPE-SRC: {' '.join(bpe_sentences[0])}")
+                
                 print("-" * 50)
             
         except Exception as e:

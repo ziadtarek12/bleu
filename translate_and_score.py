@@ -24,7 +24,8 @@ def translate_with_model(model_path, src_file, output_file):
         "-src", src_file,
         "-output", output_file,
         "-replace_unk",
-        "-verbose"
+        "-verbose",
+        "-gpu", "0"  # Use GPU 0
     ]
     print(f"Translating with model: {model_path}")
     try:

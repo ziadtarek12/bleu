@@ -19,4 +19,4 @@ SRC_FILE = "data/de-en/test.de"  # German source
 REF_FILE = "data/de-en/test.en"  # English reference
 
 # Output files for each model (auto-generated)
-OUTPUT_FILES = [f"output_model{i+1}.txt" for i in range(len(MODEL_URLS))]
+OUTPUT_FILES = [f"output_model{i}.txt" for i in range(len(MODEL_URLS))]

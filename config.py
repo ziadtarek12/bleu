@@ -5,7 +5,8 @@ OPENNMT_MODELS = [
         "model_url": "https://s3.amazonaws.com/opennmt-models/v3-py/ende/ende-large-withoutBT.pt",
         "local_model_path": "ende-large-withoutBT.pt",
         "bpe_url": "https://s3.amazonaws.com/opennmt-models/v3-py/ende/subwords.en_de.bpe",
-        "bpe_path": "subwords.en_de.bpe"
+        "bpe_path": "subwords.en_de.bpe",
+        "ct2_model_path": "ende-large-ct2"  # CTranslate2 converted model path
     }
 ]
 

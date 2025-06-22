@@ -1,6 +1,7 @@
 # requirements.txt
 sacrebleu
 OpenNMT-py
+ctranslate2
 subword-nmt
 torch
 matplotlib 

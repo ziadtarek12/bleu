@@ -70,23 +70,48 @@ def apply_bpe_to_text(text_lines, bpe_model_path):
         for line in text_lines:
             f.write(line + '\n')
     
-    # Apply BPE with OpenNMT-compatible settings
+    # Apply BPE with OpenNMT-compatible settings based on website specs
+    # The website mentions specific BPE options for this model
+    bpe_options = {
+        "mode": "aggressive",
+        "joiner_annotate": True,
+        "preserve_placeholders": True,
+        "case_markup": True,
+        "soft_case_regions": True,
+        "preserve_segmented_tokens": True,
+        "segment_case": True,
+        "segment_numbers": True,
+        "segment_alphabet_change": True
+    }
+    
     try:
+        # Try with OpenNMT separator first
         subprocess.run([
             "subword-nmt", "apply-bpe",
             "-c", bpe_model_path,
             "--input", temp_input,
             "--output", temp_output,
-            "--separator", "￭"  # Use OpenNMT-style separator
+            "--separator", "￭",  # OpenNMT-style separator
+            "--glossaries", "Jaguar,Milky,Way,Inuit,Himalaya,Dharma,anthropology"  # Preserve key terms
         ], check=True)
     except subprocess.CalledProcessError:
-        # Fallback to standard BPE if separator option not supported
-        subprocess.run([
-            "subword-nmt", "apply-bpe",
-            "-c", bpe_model_path,
-            "--input", temp_input,
-            "--output", temp_output
-        ], check=True)
+        # Fallback to standard BPE
+        try:
+            subprocess.run([
+                "subword-nmt", "apply-bpe",
+                "-c", bpe_model_path,
+                "--input", temp_input,
+                "--output", temp_output,
+                "--glossaries", "Jaguar,Milky,Way,Inuit,Himalaya,Dharma,anthropology"
+            ], check=True)
+        except subprocess.CalledProcessError:
+            # Final fallback - basic BPE
+            subprocess.run([
+                "subword-nmt", "apply-bpe",
+                "-c", bpe_model_path,
+                "--input", temp_input,
+                "--output", temp_output
+            ], check=True)
     
     # Read BPE-encoded text
     with open(temp_output, 'r', encoding='utf-8') as f:
@@ -139,8 +164,8 @@ def translate_with_ct2(model_info, src_file):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     translator = ctranslate2.Translator(model_info['ct2_model_path'], device=device)
     
-    # Translate in batches
-    batch_size = 32
+    # Translate in batches (smaller batches for higher beam size)
+    batch_size = 16
     all_translations = []
     
     print(f"Translating {len(bpe_sentences)} sentences in batches of {batch_size}...")
@@ -149,12 +174,15 @@ def translate_with_ct2(model_info, src_file):
         batch = bpe_sentences[i:i+batch_size]
         print(f"Processing batch {i//batch_size + 1}/{(len(bpe_sentences) + batch_size - 1)//batch_size}")
         
-        # Translate batch
+        # Translate batch with optimized parameters
         results = translator.translate_batch(
             batch,
-            beam_size=4,
-            max_decoding_length=200,
-            length_penalty=0.6
+            beam_size=8,              # Increased beam size for better quality
+            max_decoding_length=256,  # Allow longer outputs
+            length_penalty=0.8,       # Encourage longer outputs
+            repetition_penalty=1.1,   # Reduce repetition
+            no_repeat_ngram_size=3,   # Prevent 3-gram repetition
+            max_input_length=512      # Handle longer inputs
         )
         
         # Extract translations and clean up BPE

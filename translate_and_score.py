@@ -165,6 +165,7 @@ fi
 
 def download_models(model_urls, model_paths):
     """Download models from URLs if not already present."""
+    os.makedirs("models", exist_ok=True)  # Ensure models directory exists
     for url, path in zip(model_urls, model_paths):
         if not os.path.isfile(path):
             print(f"Downloading model from {url} to {path}...")

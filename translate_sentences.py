@@ -8,6 +8,7 @@ import ctranslate2
 import transformers
 import torch
 import matplotlib.pyplot as plt
+import subprocess
 
 
 
@@ -23,14 +24,13 @@ else:
     print("SentencePiece model already exists.")
 
 # --- Download CTranslate2 Model if Needed ---
-CT2_MODEL_URL = "https://huggingface.co/facebook/nllb-200-distilled-1.3B-ct2-int8/resolve/main/model.bin"
-CT2_MODEL_DIR = "nllb_ct2_models/nllb-200-distilled-1.3B-ct2-int8"
-CT2_MODEL_BIN = os.path.join(CT2_MODEL_DIR, "model.bin")
-
-if not os.path.isfile(CT2_MODEL_BIN):
-    print(f"Downloading CTranslate2 model from {CT2_MODEL_URL}...")
-    os.makedirs(CT2_MODEL_DIR, exist_ok=True)
-    urllib.request.urlretrieve(CT2_MODEL_URL, CT2_MODEL_BIN)
+CT2_MODEL_DIR = "nllb-200-distilled-1.3B-ct2-int8"
+if not os.path.isdir(CT2_MODEL_DIR):
+    print(f"Downloading CTranslate2 model from HuggingFace Hub to {CT2_MODEL_DIR} ...")
+    subprocess.run([
+        "python", "-c",
+        "from huggingface_hub import snapshot_download; snapshot_download(repo_id='OpenNMT/nllb-200-distilled-1.3B-ct2-int8', local_dir='nllb-200-distilled-1.3B-ct2-int8')"
+    ], check=True)
     print("Model downloaded.")
 else:
     print("CTranslate2 model already exists.")

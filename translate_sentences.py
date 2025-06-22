@@ -95,27 +95,36 @@ print("Translating the IWSLT14 test set...")
 with open(preprocessed_src, 'r', encoding='utf-8') as f:
     processed_source_sentences = [line.strip().split() for line in f]
 
-target_prefix = [[TARGET_LANGUAGE]] * len(processed_source_sentences)
-translations = translator.translate_batch(
-    processed_source_sentences,
-    beam_size=5,
-    target_prefix=target_prefix,
-    max_decoding_length=256,
-    repetition_penalty=1.0,
-)
-
-# --- Postprocess Output (Detokenization for BLEU) ---
+# Process in smaller batches to avoid GPU memory issues
+batch_size = 32  # Reduce this if you still get OOM errors
 translated_sentences_detokenized = []
 SP_SPACE_CHAR = '\u2581'  # SentencePiece space char
-for translation in translations:
-    tgt_tokens = translation.hypotheses[0]
-    if tgt_tokens and tgt_tokens[0] == TARGET_LANGUAGE:
-        tgt_tokens = tgt_tokens[1:]
-    if tgt_tokens and tgt_tokens[-1] == "</s>":
-        tgt_tokens = tgt_tokens[:-1]
-    detokenized_text = tokenizer.decode(tokenizer.convert_tokens_to_ids(tgt_tokens), skip_special_tokens=True)
-    final_cleaned_text = detokenized_text.replace(SP_SPACE_CHAR, ' ').strip()
-    translated_sentences_detokenized.append(final_cleaned_text)
+
+print(f"Processing {len(processed_source_sentences)} sentences in batches of {batch_size}...")
+for i in range(0, len(processed_source_sentences), batch_size):
+    batch_sentences = processed_source_sentences[i:i+batch_size]
+    target_prefix = [[TARGET_LANGUAGE]] * len(batch_sentences)
+    
+    print(f"Translating batch {i//batch_size + 1}/{(len(processed_source_sentences) + batch_size - 1)//batch_size}")
+    
+    translations = translator.translate_batch(
+        batch_sentences,
+        beam_size=2,  # Reduced beam size to save memory
+        target_prefix=target_prefix,
+        max_decoding_length=128,  # Reduced max length to save memory
+        repetition_penalty=1.0,
+    )
+    
+    # --- Postprocess Output (Detokenization for BLEU) ---
+    for translation in translations:
+        tgt_tokens = translation.hypotheses[0]
+        if tgt_tokens and tgt_tokens[0] == TARGET_LANGUAGE:
+            tgt_tokens = tgt_tokens[1:]
+        if tgt_tokens and tgt_tokens[-1] == "</s>":
+            tgt_tokens = tgt_tokens[:-1]
+        detokenized_text = tokenizer.decode(tokenizer.convert_tokens_to_ids(tgt_tokens), skip_special_tokens=True)
+        final_cleaned_text = detokenized_text.replace(SP_SPACE_CHAR, ' ').strip()
+        translated_sentences_detokenized.append(final_cleaned_text)
 
 # --- Save Translations to File ---
 output_file = "nllb_ct2_translations.txt"
